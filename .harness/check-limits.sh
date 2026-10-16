@@ -7,6 +7,7 @@ check() {
   [ "$n" -gt "$max" ] && echo "LIMIT: $f ${n}行（上限${max}）→ rules/state-format.md に従い退避してから作業すること"
   return 0
 }
+check AGENTS.md 60
 check CLAUDE.md 60
 check .harness/state.md 40
 check .harness/backlog.md 40

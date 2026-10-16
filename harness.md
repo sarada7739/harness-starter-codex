@@ -1,21 +1,21 @@
-# harness.md — ハーネス・ブートストラップ仕様（Claude Code 用）
+# harness.md — ハーネス・ブートストラップ仕様（Codex 用）
 
 ## 0. このファイルの位置づけ
 
-- プロジェクトルートに `harness.md` として置く。**Claude Code はこのファイルを自動では読まない。** 自動で読むのは `CLAUDE.md` だけ。
+- プロジェクトルートに `harness.md` として置く。**Codex はこのファイルを自動では読まない。** 自動で読むのは `AGENTS.md` だけ。
 - 読まれるのは次の2回だけ:
-  1. **ブートストラップ時**（`.harness/` が無い最初のセッション）。`CLAUDE.md` の起動判定から誘導される
+  1. **ブートストラップ時**（`.harness/state.md` が無い最初のセッション）。`AGENTS.md` の起動判定から誘導される
   2. ユーザーが「ハーネスを修正／再生成して」と明示した時
-- 新規プロジェクトに置くのは `harness.md`、スタブの `CLAUDE.md`（3行。ブートストラップで上書きされる）、`.claude/settings.json`、`.harness/check-limits.sh` の4ファイル。すべてプロジェクト共通で、テンプレートリポジトリからコピーする。
-- 役割は「規定の原本」と「生成器」。ブートストラップで本ファイルの各章を **分割された規定ファイル** に書き出し、以後のセッションは `CLAUDE.md` が示す条件に従って必要な分だけ読む。
+- 新規プロジェクトに置くのは `harness.md`、スタブの `AGENTS.md`（数行。ブートストラップで上書きされる）、`.harness/check-limits.sh` の3ファイル。すべてプロジェクト共通で、テンプレートリポジトリからコピーする。
+- 役割は「規定の原本」と「生成器」。ブートストラップで本ファイルの各章を **分割された規定ファイル** に書き出し、以後のセッションは `AGENTS.md` が示す条件に従って必要な分だけ読む。
 
 ### 0.1 生成物と読み込み方針
 
 | ファイル | 読むタイミング | 元になる章 |
 |---|---|---|
-| `CLAUDE.md` | **毎セッション自動**（60行以内） | 付録A |
+| `AGENTS.md` | **毎セッション自動**（60行以内） | 付録A |
+| `.harness/check-limits.sh` | **毎セッション最初に実行**（`AGENTS.md` の手順0。超過時だけ出力） | 6.4節 |
 | `.harness/state.md`（40行以内） `backlog.md`（40行以内） | **毎セッション**（再開手順） | 6章 |
-| `.harness/check-limits.sh` | **毎セッション自動実行**（SessionStart フック。超過時だけ出力） | 6.4節 |
 | `docs/constraints.md` | タスクを作成・分解する時、reviewer / auditor を起動する時 | 2章 |
 | `.harness/rules/models.md` | タスク分解・委譲・モデル選定の時 | 4章 |
 | `.harness/rules/review-gate.md` | reviewer / auditor を起動する時 | 5章（5.4除く） |
@@ -23,20 +23,23 @@
 | `.harness/rules/state-format.md` | state / decisions / backlog / tasks を更新する時、`LIMIT:` 警告が出た時 | 6.2〜6.4節 |
 | `.harness/rules/coding.md` | コードを書く・レビューする時 | 7章 |
 | `.harness/rules/unity.md` | Unityプロジェクトのファイルに触る時 | 9章 |
+| `.harness/roles/*.md` | 該当ロールで `codex exec` を起動する時（プロンプトとして渡す） | 4.2節 |
 | `docs/product.md` `architecture.md` | 技術選定・構成判断の時 | 2章 |
 | `harness.md` | ブートストラップ時／ハーネス修正時のみ | — |
 
 **生成ルール**: 「元になる章」の本文を**要約せずそのまま**書き出す。見出しレベルだけ調整してよい。生成先ファイルの冒頭1行に「読むタイミング」を書く。`rules/*.md` は各120行以内。
 
-**セッション開始の固定コスト**は `CLAUDE.md`（60行）＋ `state.md`（40行）＋ `backlog.md`（40行）＋ git log 5行 ＝ 最大約150行に抑える。これ以外は必要になった時だけ読む。
+**セッション開始の固定コスト**は `AGENTS.md`（60行）＋ `state.md`（40行）＋ `backlog.md`（40行）＋ git log 5行 ＝ 最大約150行に抑える。これ以外は必要になった時だけ読む。
 
-> Codex を併用する場合は `AGENTS.md`（Codex版）を別途配置する。`.harness/` と `docs/` は共有し、モデル選定とセッション運用だけが異なる。
+> Codex は AGENTS.md をリポジトリルートから作業ディレクトリまでの階層で連結して読む。**サブディレクトリに AGENTS.md を置かない**（固定コストが膨らむ）。ディレクトリ固有の規定は `rules/` に置き、条件表に1行足す。
+
+> Claude Code を併用する場合は `CLAUDE.md`（Claude Code 版）を別途配置する。`.harness/` と `docs/` は共有し、モデル選定とセッション運用だけが異なる。
 
 ---
 
 ## 1. フェーズ1 — ヒアリング
 
-**このモードでの推奨メインモデル: Opus 5（既定）／ 仕様が曖昧・探索的な場合は Fable 5.1**
+**このモードでの推奨: 上位モデル・推論強度 `high`（4.1節の `main` プロファイル）**
 
 ブートストラップモードでは、ユーザーが何を言っても**いきなりコードを書かない**。「〇〇を作りたい」の一行は、ヒアリング開始の合図として扱う。
 
@@ -75,6 +78,7 @@
 3. **リポジトリ運用** — PR必須か直接コミットか、ブランチ戦略
 4. **CI** — 既にあるか、新規に用意するか、実行したいチェック
 5. **制約** — 期限、予算、使えないサービス、社内規定
+6. **Codex の実行環境** — CLI / IDE拡張 / クラウドのどれか。利用できるモデル（`/model` の一覧）。`codex exec` による委譲（4.2節）が使えるか
 
 ### 1.5 ヒアリング完了条件
 
@@ -83,6 +87,7 @@
 - [ ] 言語・フレームワークが確定している
 - [ ] 機微データの有無が確定している
 - [ ] リポジトリ運用方針が確定している
+- [ ] 4.1節のモデル階層（上位／標準／軽量）に割り当てる実モデル名が確定している
 
 確定内容をユーザーに箇条書きで提示し、**明示的な承認を得てから**フェーズ2へ進む。
 
@@ -111,10 +116,11 @@ docs/
 以下を生成する。`rules/` の各ファイルは0.1節の対応表に従い、本ファイルの章をそのまま書き出す。
 
 ```
-CLAUDE.md              # 付録Aのテンプレートで既存のスタブを上書き。60行以内。規定を書かず参照先だけ書く
-.claude/settings.json  # SessionStart フックで check-limits.sh を実行（6.4節）
+AGENTS.md              # 付録Aのテンプレートで既存のスタブを上書き。60行以内。規定を書かず参照先だけ書く
+.codex/config.toml     # ロール別プロファイル（4.1節）。モデル名はヒアリング結果で埋める
 .harness/
   check-limits.sh      # 上限超過の検出。超過時だけ出力する（6.4節）
+  delegate.sh          # codex exec による委譲ラッパー（4.2節）
   state.md             # 現在地。40行以内。毎タスク更新（追記でなく書き換え）
   decisions.md         # 決定ログ。1決定=1行。200行超でarchiveへ退避
   backlog.md           # 未着手・進行中・保留のみ。40行以内。完了行はarchiveへ
@@ -128,62 +134,127 @@ CLAUDE.md              # 付録Aのテンプレートで既存のスタブを上
     state-format.md    # 6.2〜6.4節
     coding.md          # 7章
     unity.md           # 9章（Unityプロジェクトの時だけ生成）
-.claude/agents/        # サブエージェント定義（4章）
+  roles/               # ロール定義（4.2節）。codex exec に渡すプロンプト本文
 ```
 
-**サブエージェント定義の本文には、その役割が必要とする `rules/` ファイルの読み込み指示を明記する**（サブエージェントが `CLAUDE.md` の条件表を見ない場合に備える）。例: `impl-*` には `coding.md`、Unityプロジェクトなら加えて `unity.md`。
+**ロール定義の本文には、その役割が必要とする `rules/` ファイルの読み込み指示を明記する**（委譲先の `codex exec` も AGENTS.md を読むが、条件表を自分で解釈させない）。例: `impl-*` には `coding.md`、Unityプロジェクトなら加えて `unity.md`。
 
-生成後、`CLAUDE.md` の「常に読む」「状況に応じて読む」の表が生成物と一致していることを確認する。
+生成後、`AGENTS.md` の「常に読む」「状況に応じて読む」の表が生成物と一致していることを確認する。`.codex/config.toml` が読み込まれているか（信頼済みプロジェクトか）を `codex exec -p impl-l1 "モデル名を答えて"` 等で確認し、読み込まれない環境なら同じプロファイルを `~/.codex/config.toml` に追記するようユーザーに依頼する。
 
 ---
 
 ## 4. 役割とモデル　→ 生成先 `.harness/rules/models.md`
 
-### 4.1 メインエージェント（指示役・設計者）
+Codex には Claude Code のサブエージェント（`model:` フロントマターによるルーティング）が無い。代わりに **プロファイル（`.codex/config.toml` の `[profiles.*]`）でモデルと推論強度を定義し、`codex exec -p <profile>` を別プロセスとして起動して委譲する。** 委譲先は新しいコンテキストで動くので、メインの文脈を汚さない。
 
-**モデル: Opus 5（`opus`）／ 仕様が曖昧で探索が必要なら Fable 5.1（`claude-fable-5-1`）**
+### 4.1 モデル階層とプロファイル
+
+モデル名は時期と契約で変わるため、ハーネスでは**階層**だけを固定し、実モデル名はブートストラップ時に `/model` の一覧から埋める。
+
+| 階層 | 用途 | 推論強度 |
+|---|---|---|
+| 上位 | 設計、L3/L4、レビュー、監査、V2抽出 | `high` |
+| 標準 | L1/L2、テストコード生成 | `medium` |
+| 軽量 | L0（定型作業） | `low` |
+
+`.codex/config.toml`（生成例。`{{ }}` を埋める）
+```toml
+# 対話セッション（メインエージェント）の既定
+model = "{{上位モデル}}"
+model_reasoning_effort = "high"
+
+[profiles.main]
+model = "{{上位モデル}}"
+model_reasoning_effort = "high"
+
+[profiles.impl-l0]
+model = "{{軽量モデル}}"
+model_reasoning_effort = "low"
+sandbox_mode = "workspace-write"
+
+[profiles.impl-l1]
+model = "{{標準モデル}}"
+model_reasoning_effort = "medium"
+sandbox_mode = "workspace-write"
+
+[profiles.impl-l2]
+model = "{{標準モデル}}"
+model_reasoning_effort = "high"
+sandbox_mode = "workspace-write"
+
+[profiles.impl-l3]
+model = "{{上位モデル}}"
+model_reasoning_effort = "high"
+sandbox_mode = "workspace-write"
+
+[profiles.reviewer]
+model = "{{上位モデル}}"
+model_reasoning_effort = "high"
+sandbox_mode = "read-only"
+```
+L4・`impl-ui`・`designer`・`test-designer`・`auditor` も同じ形で追加する（4.2節のロール一覧の階層・推論強度に従う）。
+
+### 4.2 メインエージェントとロール
+
+#### メインエージェント（指示役・設計者）
+
+**プロファイル: `main`（上位モデル / `high`）**
 
 責務:
 - タスク分解と難易度判定（4.3節）
-- サブエージェントへの委譲と成果物の受け取り
+- `codex exec` による委譲と成果物の受け取り
 - レビューNG3回時の裁定（`rules/review-gate.md`）
 - `state.md` `decisions.md` `backlog.md` の更新
 
 **メインエージェントは実装コードを書かない。** 書きたくなったら、それは分解が足りていない合図。
 
-### 4.2 サブエージェント一覧
+#### ロール一覧
 
-| 役割 | モデル | tools | 主な仕事 | 読ませる rules |
+| ロール | プロファイル（階層 / 推論強度） | sandbox | 主な仕事 | 読ませる rules |
 |---|---|---|---|---|
-| `designer` | `opus` | Read, Grep, Glob, Write | 詳細設計、インターフェース定義、タスク分解案 | coding, (unity) |
-| `impl-l0` | `haiku` | Read, Write, Edit, Bash, Glob, Grep | 定型作業（L0） | coding, (unity) |
-| `impl-l1` | `sonnet` | 同上 | 仕様確定済みの単機能（L1） | coding, (unity) |
-| `impl-l2` | `opus` | 同上 | 複数ファイル横断・中規模リファクタ（L2） | coding, (unity) |
-| `impl-l3` | `opus` | 同上 | アーキテクチャに触れる実装（L3） | coding, (unity) |
-| `impl-l4` | `claude-fable-5-1` | 同上 | 探索的・長時間の実装（L4） | coding, (unity) |
-| `impl-ui` | `claude-fable-5-1` | 同上 | 視覚忠実度を要求するUI実装（V2） | coding, visual |
-| `ui-reviewer` | `claude-fable-5-1` | Read, Grep, Glob, Bash | 参照画像と実装結果の視覚的な突合 | visual |
-| `test-designer` | `opus` | Read, Grep, Glob, Write | テスト観点の設計（境界値、異常系、並行性） | coding, (unity) |
-| `test-writer` | `sonnet` | Read, Write, Edit, Bash, Glob, Grep | 観点に沿ったテストコード生成 | coding, (unity) |
-| `auditor` | `opus` | Read, Grep, Glob, WebSearch, WebFetch | セキュリティ・法令適合の監査 | review-gate |
-| `reviewer` | `opus` | Read, Grep, Glob, Bash | レビュー判定。**書き込み権限を与えない** | review-gate, coding, (unity) |
+| `designer` | 上位 / high | read-only（成果は stdout で返す） | 詳細設計、インターフェース定義、タスク分解案 | coding, (unity) |
+| `impl-l0` | 軽量 / low | workspace-write | 定型作業（L0） | coding, (unity) |
+| `impl-l1` | 標準 / medium | workspace-write | 仕様確定済みの単機能（L1） | coding, (unity) |
+| `impl-l2` | 標準 / high | workspace-write | 複数ファイル横断・中規模リファクタ（L2） | coding, (unity) |
+| `impl-l3` | 上位 / high | workspace-write | アーキテクチャに触れる実装（L3） | coding, (unity) |
+| `impl-l4` | 上位 / high（長時間） | workspace-write | 探索的・長時間の実装（L4）。対話セッションで行ってもよい | coding, (unity) |
+| `impl-ui` | 上位 / high | workspace-write | 視覚忠実度を要求するUI実装（V2） | coding, visual |
+| `ui-reviewer` | 上位 / high | read-only | 参照画像と実装結果の視覚的な突合（`-i` で画像を渡す） | visual |
+| `test-designer` | 上位 / high | read-only | テスト観点の設計（境界値、異常系、並行性） | coding, (unity) |
+| `test-writer` | 標準 / medium | workspace-write | 観点に沿ったテストコード生成 | coding, (unity) |
+| `auditor` | 上位 / high（Web検索を有効化） | read-only | セキュリティ・法令適合の監査 | review-gate |
+| `reviewer` | 上位 / high | **read-only** | レビュー判定。**書き込み権限を与えない** | review-gate, coding, (unity) |
 
 （unity）は Unity プロジェクトの場合のみ。
 
-フロントマター例:
+ロール定義例 `.harness/roles/impl-l2.md`:
 
 ```markdown
----
-name: impl-l2
-description: 複数ファイルにまたがる中規模の実装・リファクタを担当する。タスク難易度L2で使う。
-tools: Read, Write, Edit, Bash, Glob, Grep
-model: opus
----
-あなたは実装担当です。作業前に .harness/rules/coding.md を読むこと。
+あなたは実装担当（impl-l2）です。作業前に .harness/rules/coding.md を読むこと。
 渡されたタスクファイル（.harness/tasks/T-xxx.md）の受入条件だけを満たしてください。
 それ以外の改善提案は実装せず、報告に留めること。
+state.md / backlog.md / decisions.md は更新しない（メインエージェントの責務）。
 完了時は変更ファイル一覧と受入条件の充足状況を返す。
 ```
+
+委譲ラッパー `.harness/delegate.sh`:
+```bash
+#!/usr/bin/env bash
+# 使い方: bash .harness/delegate.sh <role> <T-xxx> [追加指示]
+set -euo pipefail
+role=$1 task=$2; shift 2
+codex exec -p "$role" \
+  "$(cat ".harness/roles/$role.md")
+
+タスク: .harness/tasks/$task.md
+$*"
+```
+- reviewer には diff と受入条件だけを渡す: `bash .harness/delegate.sh reviewer T-014 "$(git diff)"`
+- 画像を渡すロール（`impl-ui` `ui-reviewer`）は `codex exec -i <画像パス>` を付けて直接起動する。
+
+**`codex exec` が使えない環境**（クラウド/IDE で入れ子実行できない、ネットワークが塞がれている等）では、次の代替で運用し、`decisions.md` に1行記録する。
+- 実装ロールは、ユーザーに `codex -p <role>` で**別セッションを起動してもらい**、ロール定義とタスクファイルを渡す。
+- それも難しい場合に限り、メインセッションがロールを明示的に切り替えて実装してよい（`tasks/T-xxx.md` に「担当: main(代行)」と記録）。**ただし reviewer だけは必ず別セッション・read-only で行う。** 実装した文脈のまま自己レビューしない。
 
 ### 4.3 難易度判定
 
@@ -203,9 +274,9 @@ L3/L4 は境界が「難しさ」ではなく**セッションの長さと曖昧
 
 参照画像ありのUIタスクは、L軸とは別に V軸（`rules/visual.md`）で判定する。Unity固有の補正は `rules/unity.md` 5節。
 
-### 4.4 Codex を併用する場合
+### 4.4 Claude Code を併用する場合
 
-Codex には `model:` フロントマターによるモデルルーティングが存在しないため、Codex 側は `AGENTS.md`（Codex版）の規定に従う。`.harness/` と `docs/` は共有するので、どちらから再開しても現在地は引き継がれる。
+Claude Code 側は `CLAUDE.md`（Claude Code 版）と `.claude/agents/` の規定に従う。`.harness/` と `docs/` は共有するので、どちらから再開しても現在地は引き継がれる。ロール名とL/V軸は両者で共通にする。
 
 ---
 
@@ -225,9 +296,9 @@ L0〜L4 はロジックの難易度を表す。**参照画像やデザインカ�
 - 複数画面をまたいでデザイントーンの一貫性が必要
 
 **V2 タスクの進め方**
-1. `impl-ui` はコードを書く前に、参照画像から**デザイントークンを抽出して文書化する**（`docs/design-tokens.md`、80行以内）。配色、タイポグラフィスケール、余白スケール、角丸、影、ブレークポイント。
-2. トークン確定後の個別コンポーネント実装は、トークンに従うだけなので `impl-l1`（Sonnet）に委譲してよい。**高コストモデルを使うのは抽出フェーズであって、量産フェーズではない。**
-3. 参照画像はタスクファイルにパスを記録する。再開時に同じ画像を見られるようにする。
+1. `impl-ui` はコードを書く前に、参照画像から**デザイントークンを抽出して文書化する**（`docs/design-tokens.md`、80行以内）。配色、タイポグラフィスケール、余白スケール、角丸、影、ブレークポイント。参照画像は `codex exec -i <画像>` で渡す。
+2. トークン確定後の個別コンポーネント実装は、トークンに従うだけなので `impl-l1`（標準モデル）に委譲してよい。**高コストモデルを使うのは抽出フェーズであって、量産フェーズではない。**
+3. 参照画像はリポジトリ内（例: `docs/refs/`）に置き、タスクファイルにパスを記録する。再開時に同じ画像を見られるようにする。
 
 ---
 
@@ -235,7 +306,7 @@ L0〜L4 はロジックの難易度を表す。**参照画像やデザインカ�
 
 ### 5.1 判定
 
-`reviewer` は各タスクの完了時に起動し、**`続行` か `NG` のどちらか一語**で判定する。中間の評価を出さない。
+`reviewer` は各タスクの完了時に**別プロセス・read-only**（`bash .harness/delegate.sh reviewer T-xxx "$(git diff)"`）で起動し、**`続行` か `NG` のどちらか一語**で判定する。中間の評価を出さない。
 
 **`続行` の条件（すべて満たす）**
 - タスクファイルの受入条件をすべて満たしている
@@ -243,6 +314,8 @@ L0〜L4 はロジックの難易度を表す。**参照画像やデザインカ�
 - `constraints.md` に違反していない
 - `rules/coding.md`（Unityなら加えて `rules/unity.md`）に違反していない
 - 受入条件の範囲外の変更が混入していない
+
+read-only sandbox でビルド・テストが実行できない場合は、メインエージェントが実行した結果のログ末尾を reviewer に渡す。
 
 **`NG` の出力形式**（これ以外を書かない）
 ```
@@ -264,6 +337,8 @@ ESCALATE
 根本原因の仮説: <1〜3行>
 ```
 
+reviewer は毎回新しいプロセスで起動されるため、**メインエージェントは過去のNG理由（`tasks/T-xxx.md` のレビュー履歴）を追加指示として渡す。** reviewer は履歴にNGが2回あり今回もNGなら ESCALATE を返す。
+
 メインエージェントは以下のいずれかを選び、`decisions.md` に1行で記録する:
 
 1. **タスクを分割する** — 分解不足が原因のとき（最も多い）
@@ -276,7 +351,7 @@ ESCALATE
 
 ### 5.3 監査ゲート
 
-`constraints.md` に機微データの扱いが含まれる場合、`reviewer` の `続行` の後に `auditor` を起動する。
+`constraints.md` に機微データの扱いが含まれる場合、`reviewer` の `続行` の後に `auditor` を起動する。`auditor` のプロファイルは Web 検索を有効にする（`codex --search` 相当の設定）。
 
 対象: 認証・認可、決済、個人情報の保存/送信、外部公開API、ファイルアップロード、データ移行
 
@@ -287,13 +362,13 @@ ESCALATE
 根拠URL: <法令・ガイドラインを参照した場合は必ず記載>
 ```
 
-**`auditor` は法令解釈の最終判断を下さない。** 法令・業界ガイドラインに関わる指摘は必ず一次情報を検索して根拠URLを付け、`要人間判断` としてユーザーに上げる。モデルの記憶だけで「問題なし」と判定することを禁止する。
+**`auditor` は法令解釈の最終判断を下さない。** 法令・業界ガイドラインに関わる指摘は必ず一次情報を検索して根拠URLを付け、`要人間判断` としてユーザーに上げる。モデルの記憶だけで「問題なし」と判定することを禁止する。Web検索が使えない環境では、法令に関わる項目は一律 `要人間判断` とする。
 
 ---
 
 ## 5.4 視覚レビューゲート　→ 生成先 `.harness/rules/visual.md`（後半）
 
-V2 タスクでは、`reviewer` の `続行` の後に `ui-reviewer` を起動する。
+V2 タスクでは、`reviewer` の `続行` の後に `ui-reviewer` を起動する（`codex exec -p ui-reviewer -i <参照画像> -i <実装スクショ> ...`）。
 
 `ui-reviewer` は参照画像と実装結果を並べて突合し、以下を出力する:
 ```
@@ -301,7 +376,7 @@ V2 タスクでは、`reviewer` の `続行` の後に `ui-reviewer` を起動�
 差異: <箇条書き。「余白が広い」ではなく「カード間の縦余白が参照24px相当に対し実装32px」のように具体値で>
 ```
 
-- スクリーンショットを撮る手段（Playwright、Unity MCP 等）がある場合はそれを使う。無い場合は実装コードとトークン定義の照合に留め、**最終確認はユーザーの目視に委ねる**と明記して返す。
+- スクリーンショットを撮る手段（Playwright、Unity MCP 等）がある場合は、メインエージェントが撮影して `ui-reviewer` に画像として渡す。無い場合は実装コードとトークン定義の照合に留め、**最終確認はユーザーの目視に委ねる**と明記して返す。
 - NGカウンタは5.2節と共通。ロジックのNGと視覚のNGを合算して3回でエスカレーションする。
 - 「なんとなく違う」という判定を禁止する。差異を具体値で指摘できないなら `続行` を出す。
 
@@ -309,11 +384,11 @@ V2 タスクでは、`reviewer` の `続行` の後に `ui-reviewer` を起動�
 
 ## 6. 状態管理と再開
 
-### 6.1 再開手順　→ `CLAUDE.md` の「常に読む」に反映
+### 6.1 再開手順　→ `AGENTS.md` の「常に読む」に反映
 
-セッション開始時（再開モード）、メインエージェントは以下を**この順で**読む。読み終えるまで作業を始めない。
+セッション開始時（再開モード）、メインエージェントは以下を**この順で**行う。読み終えるまで作業を始めない。
 
-0. SessionStart フックの出力に `LIMIT:` があれば、該当ファイルの退避を**最初のタスクとして**行う
+0. `bash .harness/check-limits.sh` を実行する。`LIMIT:` が出たら、該当ファイルの退避を**最初のタスクとして**行う
 1. `.harness/state.md`（必ず全文）
 2. `.harness/backlog.md`（必ず全文）
 3. 直近のコミット5件（`git log --oneline -5`、PRがあれば `gh pr list --limit 3`）
@@ -378,15 +453,15 @@ T-015 | L1 | 未着手 | タスクトレイメニュー
 - `state.md` は追記しない。常に書き換える。履歴は `decisions.md` とコミットログが持つ。
 - 経緯の詳細はファイルに書かず、**PR本文とコミットメッセージに書く**。
 - 1タスク = 1コミット（またはPR）。コミットメッセージ1行目に `T-014` を含める。PR運用する場合、PR本文に「何を」「なぜ」「受入条件の充足」を各1〜3行で書く。
-- `CLAUDE.md` は60行を超えない。規定を足したくなったら `rules/` に足し、条件表に1行追加する。
+- `AGENTS.md` は60行を超えない。規定を足したくなったら `rules/` に足し、条件表に1行追加する。
 - reviewer に渡すのは対象タスクの `git diff` と受入条件だけ。ファイル全体やリポジトリ全体を読ませない。
 - 進行中の議論・試行錯誤はファイルに残さない。結論だけを `decisions.md` に1行で書く。
 
-### 6.4 上限の機械的チェック（SessionStart フック）
+### 6.4 上限の機械的チェック
 
-上限は指示だけに頼らず、セッション開始時にスクリプトで検知する。**超過が無ければ何も出力しない**ので、正常時のトークン消費はゼロ。
+上限は指示だけに頼らず、スクリプトで検知する。Codex には Claude Code の SessionStart フックに相当する仕組みが無いため、**`AGENTS.md` の手順0としてセッション開始時に実行させる。** 超過が無ければ何も出力しないので、正常時のトークン消費はほぼゼロ。
 
-`.harness/check-limits.sh`（Windows は Git Bash で実行される。Claude Code の動作要件に含まれる）
+`.harness/check-limits.sh`（Windows は Git Bash または WSL で実行する）
 ```bash
 #!/usr/bin/env bash
 # 上限超過のファイルだけ報告する。正常時は無出力
@@ -397,6 +472,7 @@ check() {
   [ "$n" -gt "$max" ] && echo "LIMIT: $f ${n}行（上限${max}）→ rules/state-format.md に従い退避してから作業すること"
   return 0
 }
+check AGENTS.md 60
 check CLAUDE.md 60
 check .harness/state.md 40
 check .harness/backlog.md 40
@@ -408,16 +484,7 @@ for f in .harness/tasks/*.md;  do check "$f" 80;  done
 exit 0
 ```
 
-`.claude/settings.json`
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      { "hooks": [ { "type": "command", "command": "bash .harness/check-limits.sh" } ] }
-    ]
-  }
-}
-```
+CI がある場合は、同じスクリプトを CI でも実行し、出力があれば失敗させてよい（実行忘れの保険）。
 
 `LIMIT:` が出たセッションでは、6.1節の手順0に従い、退避を最初のタスクとして処理する。退避せずに実装タスクへ進むことを禁止する。
 
@@ -464,7 +531,7 @@ exit 0
 
 ## 9. Unity 開発ルール　→ 生成先 `.harness/rules/unity.md`（Unityプロジェクトのみ生成）
 
-対象: Unity 6 以降。Editor 操作は Claude Code 用の公式 Unity プラグイン（Unity CLI ＋ Unity MCP サーバー）を前提とする。
+対象: Unity 6 以降。Editor 操作は Unity MCP サーバーを Codex に登録して行う（`.codex/config.toml` または `~/.codex/config.toml` の `[mcp_servers.<名前>]`）。
 
 ### 9.1 設計原則 — コードファースト
 
@@ -483,7 +550,7 @@ AI が読み書きできるのはテキストだけ。Editor の GUI 操作に�
 - **変更のたびに Console のコンパイルエラーを確認する。** 0件になるまで次の変更に進まない。
 - **`.unity` `.prefab` `.asset` を手でテキスト編集しない。** YAML を壊す。変更は MCP 経由か C# の Editor スクリプトで行う。
 - Play Mode 中にスクリプトを編集しない（ドメインリロードで状態が飛ぶ）。
-- MCP が接続できない時は、その旨を報告してテキスト編集可能な範囲（C#、UXML/USS、JSON）だけ進める。シーン変更が必要なら **ユーザーに Editor 操作を依頼する**。
+- MCP が接続できない時（`codex exec` の委譲先で MCP が使えない場合を含む）は、その旨を報告してテキスト編集可能な範囲（C#、UXML/USS、JSON）だけ進める。シーン変更が必要なら **ユーザーに Editor 操作を依頼する**。
 
 ### 9.3 ファイルと Git
 
@@ -497,7 +564,7 @@ AI が読み書きできるのはテキストだけ。Editor の GUI 操作に�
 
 - Unity Test Framework を使う。**EditMode**: Pure C# ロジック（ここを厚くする）。**PlayMode**: シーン依存の最小限。
 - reviewer の `続行` 条件に「コンパイルエラー0件」「EditMode テスト全通過」を加える。
-- ビルドは C# の `BuildPipeline` スクリプト（`Editor/Build.cs`）を用意し、`Unity.exe -batchmode -quit -projectPath . -executeMethod Build.Run -logFile build.log` で実行できるようにする。ビルド失敗の判定は `build.log` の末尾を読む。
+- ビルドは C# の `BuildPipeline` スクリプト（`Editor/Build.cs`）を用意し、`Unity.exe -batchmode -quit -projectPath . -executeMethod Build.Run -logFile build.log` で実行できるようにする。ビルド失敗の判定は `build.log` の末尾を読む。Codex の sandbox からは Unity を起動できないことが多いので、その場合はユーザーに実行を依頼し `build.log` を読む。
 - 常駐アプリは Profiler で CPU/GPU を確認するタスクをバックログに入れる。`Application.targetFrameRate` の既定値を `architecture.md` に書く。
 
 ### 9.5 難易度判定の補正
@@ -516,39 +583,39 @@ AI が読み書きできるのはテキストだけ。Editor の GUI 操作に�
 
 ---
 
-## 10. 禁止事項　→ `CLAUDE.md` の「絶対ルール」に短縮して反映
+## 10. 禁止事項　→ `AGENTS.md` の「絶対ルール」に短縮して反映
 
 - ヒアリング完了・承認前に実装を始めること
-- メインエージェントが実装コードを書くこと
-- `reviewer` に書き込み権限を与えること
+- メインエージェントが実装コードを書くこと（4.2節の代替運用で「代行」を記録した場合を除く）
+- `reviewer` を書き込み可能な sandbox で起動すること、実装と同じ文脈で自己レビューすること
 - `auditor` が根拠URLなしで法令適合を「問題なし」と判定すること
 - 難易度判定を飛ばして最初から上位モデルに委譲すること
 - V2 タスクでデザイントークンを抽出せずにコンポーネント実装を始めること
 - V2 の量産フェーズまで高コストモデルを使い続けること
 - `state.md` を更新せずにタスクを完了扱いにすること
-- `CLAUDE.md` に規定本文を書くこと、`rules/` を `@` インポートで常時読み込みにすること
-- `LIMIT:` 警告を無視して実装タスクに進むこと
+- `AGENTS.md` に規定本文を書くこと、サブディレクトリに AGENTS.md を増やすこと
+- `check-limits.sh` を実行せずに作業を始めること、`LIMIT:` 警告を無視して実装タスクに進むこと
 - 完了タスクの行を `backlog.md` に残すこと
 - reviewer にリポジトリ全体を読ませること（渡すのは diff と受入条件）
 - Unity: Console にエラーがある状態で完了報告すること
 
 ---
 
-## 付録A — `CLAUDE.md` テンプレート
+## 付録A — `AGENTS.md` テンプレート
 
-ブートストラップ時、以下をそのまま `CLAUDE.md` として生成する。`{{ }}` はプロジェクトに合わせて埋める。Unity プロジェクトでない場合は Unity の行を削る。
+ブートストラップ時、以下をそのまま `AGENTS.md` として生成する。`{{ }}` はプロジェクトに合わせて埋める。Unity プロジェクトでない場合は Unity の行を削る。
 
 ```markdown
-# CLAUDE.md — {{プロジェクト名}}
+# AGENTS.md — {{プロジェクト名}}
 
 毎セッション自動で読まれる。**60行以内。規定本文は書かない。** 規定は下の参照先にある。
 
 ## 起動判定
 - `.harness/state.md` が無い → `harness.md` を全文読み、ブートストラップを実行する。それ以外は読まない。
-- ある → 再開モード。「常に読む」を順に読み、**現在地を3行で報告してから**作業する。
+- ある → 再開モード。「常に読む」を順に行い、**現在地を3行で報告してから**作業する。
 
 ## 常に読む（再開時、この順で。読み終えるまで作業しない）
-0. SessionStart フックの出力に `LIMIT:` があれば、退避を最初のタスクにする
+0. `bash .harness/check-limits.sh` を実行。`LIMIT:` があれば退避を最初のタスクにする
 1. `.harness/state.md`
 2. `.harness/backlog.md`
 3. `git log --oneline -5`
@@ -558,6 +625,7 @@ AI が読み書きできるのはテキストだけ。Editor の GUI 操作に�
 | 状況 | 読むファイル |
 |---|---|
 | タスクを作成・分解・委譲する、モデルを選ぶ | `.harness/rules/models.md`, `docs/constraints.md` |
+| ロールに委譲する | `.harness/roles/<role>.md` を `bash .harness/delegate.sh <role> T-xxx` で渡す |
 | reviewer / auditor を起動する、NG を裁定する | `.harness/rules/review-gate.md`, `docs/constraints.md` |
 | 参照画像ありの UI タスク（V1/V2） | `.harness/rules/visual.md` |
 | コードを書く・レビューする | `.harness/rules/coding.md` |
@@ -565,14 +633,12 @@ AI が読み書きできるのはテキストだけ。Editor の GUI 操作に�
 | Unity プロジェクトのファイルに触る | `.harness/rules/unity.md` |
 | 技術選定・構成に関わる判断をする | `docs/architecture.md` → 必要なら `docs/product.md` |
 | ハーネス自体を修正・再生成する | `harness.md` |
-| Codex で作業する | `AGENTS.md` |
-
-`@` インポートは使わない（毎回読み込まれ、分割の意味が無くなる）。
+| Claude Code で作業する | `CLAUDE.md` |
 
 ## 絶対ルール（詳細は `rules/`）
 - 承認前に実装を始めない
-- メインエージェントは実装コードを書かない
-- `reviewer` に書き込み権限を与えない
+- メインエージェントは実装コードを書かない。実装は `codex exec -p impl-*` に委譲する
+- `reviewer` は別プロセス・`read-only` で起動する。自己レビューしない
 - 受入条件の範囲外を変更しない
 - `state.md` を更新せずに完了扱いにしない。完了行を `backlog.md` に残さない
 - reviewer には diff と受入条件だけ渡す
@@ -580,5 +646,5 @@ AI が読み書きできるのはテキストだけ。Editor の GUI 操作に�
 
 ## プロジェクト固有（5行以内）
 - {{例: Unity 6 / URP / Windows 専用 / UniWindowController で透過}}
-- {{例: 常駐アプリ。放浪モード中は targetFrameRate 30}}
+- {{例: モデル階層 上位={{上位モデル}} 標準={{標準モデル}} 軽量={{軽量モデル}}}}
 ```
