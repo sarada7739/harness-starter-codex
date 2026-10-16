@@ -14,7 +14,7 @@
 | ファイル | 読むタイミング | 元になる章 |
 |---|---|---|
 | `AGENTS.md` | **毎セッション自動**（60行以内） | 付録A |
-| `.harness/check-limits.sh` | **毎セッション最初に実行**（`AGENTS.md` の手順0。超過時だけ出力） | 6.4節 |
+| `.harness/check-limits.sh` | **毎セッション最初に実行**（`AGENTS.md` の手順0。超過・ロック検出時だけ出力） | 6.4節 |
 | `.harness/state.md`（40行以内） `backlog.md`（40行以内） | **毎セッション**（再開手順） | 6章 |
 | `docs/constraints.md` | タスクを作成・分解する時、reviewer / auditor を起動する時 | 2章 |
 | `.harness/rules/models.md` | タスク分解・委譲・モデル選定の時 | 4章 |
@@ -23,6 +23,7 @@
 | `.harness/rules/state-format.md` | state / decisions / backlog / tasks を更新する時、`LIMIT:` 警告が出た時 | 6.2〜6.4節 |
 | `.harness/rules/coding.md` | コードを書く・レビューする時 | 7章 |
 | `.harness/rules/unity.md` | Unityプロジェクトのファイルに触る時 | 9章 |
+| `.harness/rules/parallel.md` | タスクを並行させる時、worktree を作る・マージする時、`LOCK:` 警告が出た時 | 6.5節 |
 | `.harness/roles/*.md` | 該当ロールで `codex exec` を起動する時（プロンプトとして渡す） | 4.2節 |
 | `docs/product.md` `architecture.md` | 技術選定・構成判断の時 | 2章 |
 | `harness.md` | ブートストラップ時／ハーネス修正時のみ | — |
@@ -121,6 +122,7 @@ AGENTS.md              # 付録Aのテンプレートで既存のスタブを上
 .harness/
   check-limits.sh      # 上限超過の検出。超過時だけ出力する（6.4節）
   delegate.sh          # codex exec による委譲ラッパー（4.2節）
+  roles/_common.md     # 全ロール共通の前置き（4.2節）
   state.md             # 現在地。40行以内。毎タスク更新（追記でなく書き換え）
   decisions.md         # 決定ログ。1決定=1行。200行超でarchiveへ退避
   backlog.md           # 未着手・進行中・保留のみ。40行以内。完了行はarchiveへ
@@ -134,7 +136,9 @@ AGENTS.md              # 付録Aのテンプレートで既存のスタブを上
     state-format.md    # 6.2〜6.4節
     coding.md          # 7章
     unity.md           # 9章（Unityプロジェクトの時だけ生成）
+    parallel.md        # 6.5節
   roles/               # ロール定義（4.2節）。codex exec に渡すプロンプト本文
+.gitattributes         # 追記型ログを union マージにする（6.5節）
 ```
 
 **ロール定義の本文には、その役割が必要とする `rules/` ファイルの読み込み指示を明記する**（委譲先の `codex exec` も AGENTS.md を読むが、条件表を自分で解釈させない）。例: `impl-*` には `coding.md`、Unityプロジェクトなら加えて `unity.md`。
@@ -201,12 +205,13 @@ L4・`impl-ui`・`designer`・`test-designer`・`auditor` も同じ形で追加�
 **プロファイル: `main`（上位モデル / `high`）**
 
 責務:
-- タスク分解と難易度判定（4.3節）
-- `codex exec` による委譲と成果物の受け取り
+- タスク分解と難易度判定（4.3節）、タスク番号の採番
+- `codex exec` による委譲と成果物の受け取り。`designer` `test-designer` の出力をタスクファイルへ転記する
+- ビルド・テストの実行と、その結果を reviewer に渡すこと
 - レビューNG3回時の裁定（`rules/review-gate.md`）
-- `state.md` `decisions.md` `backlog.md` の更新
+- `.harness/` と `docs/` の更新、コミット、マージ（**これらを書けるのはメインだけ**）
 
-**メインエージェントは実装コードを書かない。** 書きたくなったら、それは分解が足りていない合図。
+**メインエージェントは実装コードを書かない。** 書きたくなったら、それは分解が足りていない合図。設計やテスト観点を文章としてタスクファイルに書くのは実装に当たらない。
 
 #### ロール一覧
 
@@ -227,13 +232,50 @@ L4・`impl-ui`・`designer`・`test-designer`・`auditor` も同じ形で追加�
 
 （unity）は Unity プロジェクトの場合のみ。
 
-ロール定義例 `.harness/roles/impl-l2.md`:
+#### 工程と起動条件
 
+1タスクは次の順で進める。**どの工程を通すかはタスク作成時にメインが決め、`tasks/T-xxx.md` の「工程」行に書く。**
+
+| # | 工程 | 担当 | 起動条件 | 成果物の行き先 |
+|---|---|---|---|---|
+| 1 | 詳細設計 | `designer` | **L2 以上は必須**。L0/L1 は不要 | stdout → メインが `## 設計` に転記（30行以内） |
+| 2 | テスト観点 | `test-designer` | **L2 以上、または状態機械・計算・境界のあるロジックを含む L1** | stdout → メインが `## テスト観点` に転記（受入条件の一部になる） |
+| 3 | 実装 | `impl-l0`〜`l4` / `impl-ui` | 常に | 作業ツリーのコード |
+| 4 | テストコード | `test-writer` | 2 を通したタスクは必須 | 作業ツリーのテスト |
+| 5 | ビルド・テスト実行 | メイン | 常に | ログ末尾（reviewer に渡す） |
+| 6 | レビュー | `reviewer` | 常に | `続行` / `NG` / `ESCALATE` |
+| 7 | 監査 | `auditor` | 5.3節の対象 | 監査結果 |
+| 8 | 視覚レビュー | `ui-reviewer` | V2 | 視覚判定 |
+| 9 | 確定 | メイン | 6〜8 がすべて通過 | コミット、マージ、state / backlog / decisions 更新 |
+
+- **テストは実装の後（3→4）が既定。** 状態機械・時間計算・パラメータ演算など、観点から期待値が確定するものは**テスト先行（4→3）**にしてよい。どちらにしたかを「工程」行に書く。
+- 3 と 4 は**同じタスク・同じ作業ツリー**で行い、reviewer は両方を1つの diff として判定する。テストだけを別タスクに切り出さない。
+- NG の差し戻し先は、NG 理由が指す工程（実装なら 3、テストなら 4）。設計の不備が理由なら 1 からやり直し、メインが `## 設計` を書き換える。
+- `designer` の設計が30行に収まらない、または `## 設計` を入れてタスクファイルが80行を超えるなら、**タスク分割の合図**として扱う。
+
+#### 書き込み範囲
+
+| 担当 | 書いてよいもの | 書いてはいけないもの |
+|---|---|---|
+| メイン | `.harness/` 全体、`docs/`、`AGENTS.md`、コミット・マージ | 実装コード、テストコード |
+| `impl-*` `test-writer` | 自分のタスクの作業ツリー内のコードとテスト（V2 の `impl-ui` は加えて `docs/design-tokens.md`） | `.harness/`、`docs/`（上記を除く）、`AGENTS.md`、コミット |
+| `designer` `test-designer` `reviewer` `auditor` `ui-reviewer` | なし（read-only。結果は stdout） | すべて |
+
+#### ロール定義
+
+全ロール共通の前置き `.harness/roles/_common.md`:
+```markdown
+あなたはメインエージェントから委譲されたロールです。メインではありません。
+AGENTS.md の「起動判定」「常に読む」は実行しない。ブートストラップもしない。
+.harness/ docs/ AGENTS.md は書き換えない。git commit / merge / push はしない。
+作業してよいのは現在の作業ディレクトリ内だけ。
+```
+
+ロール定義例 `.harness/roles/impl-l2.md`:
 ```markdown
 あなたは実装担当（impl-l2）です。作業前に .harness/rules/coding.md を読むこと。
-渡されたタスクファイル（.harness/tasks/T-xxx.md）の受入条件だけを満たしてください。
+渡されたタスクファイル（.harness/tasks/T-xxx.md）の受入条件と「## 設計」だけを満たしてください。
 それ以外の改善提案は実装せず、報告に留めること。
-state.md / backlog.md / decisions.md は更新しない（メインエージェントの責務）。
 完了時は変更ファイル一覧と受入条件の充足状況を返す。
 ```
 
@@ -243,14 +285,26 @@ state.md / backlog.md / decisions.md は更新しない（メインエージェ�
 # 使い方: bash .harness/delegate.sh <role> <T-xxx> [追加指示]
 set -euo pipefail
 role=$1 task=$2; shift 2
-codex exec -p "$role" \
-  "$(cat ".harness/roles/$role.md")
+root=$(git rev-parse --show-toplevel)
+wt="$(dirname "$root")/wt-$task"; base=$(git -C "$root" rev-parse --abbrev-ref HEAD)
+[ -d "$wt" ] || { wt=$root; base=HEAD; }   # worktree が無ければ直列運用
+extra="$*"
+case "$role" in reviewer|auditor|ui-reviewer)
+  git -C "$wt" add -N .   # 新規ファイルも diff に含める（ステージはしない）
+  extra="対象 diff:
+$(git -C "$wt" diff "$(git -C "$wt" merge-base "$base" HEAD)")
+$extra" ;;
+esac
+cd "$wt"
+codex exec -p "$role" "$(cat "$root/.harness/roles/_common.md" "$root/.harness/roles/$role.md")
 
-タスク: .harness/tasks/$task.md
-$*"
+タスク: $root/.harness/tasks/$task.md
+$extra"
 ```
-- reviewer には diff と受入条件だけを渡す: `bash .harness/delegate.sh reviewer T-014 "$(git diff)"`
-- 画像を渡すロール（`impl-ui` `ui-reviewer`）は `codex exec -i <画像パス>` を付けて直接起動する。
+- タスクファイルはメインの作業ツリーの最新版を絶対パスで渡す（worktree 内のコピーは作成時点で止まっているため）。diff は分岐点との差分なので、他タスクのマージでベースが進んでも混ざらない。
+- reviewer には diff と受入条件だけが渡る。ビルド・テストのログはメインが追加指示として渡す: `bash .harness/delegate.sh reviewer T-014 "テスト: $(tail -20 test.log)"`
+- 画像を渡すロール（`impl-ui` `ui-reviewer`）は `codex exec -i <画像パス>` を付けて直接起動する（前置きとロール定義は同じく先頭に付ける）。
+- 委譲は同期実行。**1つの作業ツリーに同時に2つのロールを走らせない。** 並行は 6.5節の worktree 単位でのみ行う。
 
 **`codex exec` が使えない環境**（クラウド/IDE で入れ子実行できない、ネットワークが塞がれている等）では、次の代替で運用し、`decisions.md` に1行記録する。
 - 実装ロールは、ユーザーに `codex -p <role>` で**別セッションを起動してもらい**、ロール定義とタスクファイルを渡す。
@@ -388,7 +442,7 @@ V2 タスクでは、`reviewer` の `続行` の後に `ui-reviewer` を起動�
 
 セッション開始時（再開モード）、メインエージェントは以下を**この順で**行う。読み終えるまで作業を始めない。
 
-0. `bash .harness/check-limits.sh` を実行する。`LIMIT:` が出たら、該当ファイルの退避を**最初のタスクとして**行う
+0. `bash .harness/check-limits.sh` を実行する。`LOCK:` が出たらユーザーに確認するまで何もしない（6.5節）。`LIMIT:` が出たら、該当ファイルの退避を**最初のタスクとして**行う。どちらも無ければロックを取る（6.5節）
 1. `.harness/state.md`（必ず全文）
 2. `.harness/backlog.md`（必ず全文）
 3. 直近のコミット5件（`git log --oneline -5`、PRがあれば `gh pr list --limit 3`）
@@ -436,6 +490,14 @@ T-015 | L1 | 未着手 | タスクトレイメニュー
 ```markdown
 # T-014 放浪モードのウィンドウ透過切替
 難易度: L3 / 担当: impl-l3 / NGカウンタ: 1
+工程: 設計 → 観点 → テスト先行 → 実装 → レビュー / worktree: wt-T-014
+触るファイル: Assets/Scripts/Window/*.cs, Assets/Tests/EditMode/WindowModeTests.cs
+
+## 設計（designer の出力をメインが転記。30行以内）
+- WindowModeController が状態（通常/放浪）を持ち、切替は UniWindowController 経由
+
+## テスト観点（test-designer の出力をメインが転記）
+- 切替を連打しても状態が一意に定まる
 
 ## 受入条件
 - [ ] 犬以外の領域でクリックが背後のアプリに届く
@@ -481,12 +543,53 @@ check docs/product.md 80
 check docs/architecture.md 150
 for f in .harness/rules/*.md; do check "$f" 120; done
 for f in .harness/tasks/*.md;  do check "$f" 80;  done
+lock="$(git rev-parse --git-common-dir 2>/dev/null)/harness.lock"
+[ -f "$lock" ] && echo "LOCK: 別のメインセッションが動いている可能性（$(cat "$lock")）→ rules/parallel.md に従いユーザーに確認すること"
 exit 0
 ```
 
 CI がある場合は、同じスクリプトを CI でも実行し、出力があれば失敗させてよい（実行忘れの保険）。
 
 `LIMIT:` が出たセッションでは、6.1節の手順0に従い、退避を最初のタスクとして処理する。退避せずに実装タスクへ進むことを禁止する。
+
+### 6.5 並行運用　→ 生成先 `.harness/rules/parallel.md`
+
+`state.md` `backlog.md` は1つの現在地を表すファイルなので、書き手が2人いると壊れる。**並行させてよいのは実装（4.2節の工程1〜8）だけで、状態の確定（工程9）は常に直列にする。**
+
+**原則**
+- **メインセッションは常に1つ。** Codex と Claude Code を併用する場合も、同時にメインになれるのはどちらか一方。
+- `.harness/` と `docs/` を書くのはメインだけ、**ベースブランチ（main 等）の作業ツリー上だけ**。タスクのブランチや PR に状態ファイルを含めない。
+- ブートストラップ、ハーネスの修正・再生成、archive への退避は並行させない。
+
+**ロック**（`.git` の共通ディレクトリに置くので worktree 間で共有され、コミットされない）
+- 取得: 6.1節の手順0で `LOCK:` が出なければ `echo "$(date '+%F %R') codex" > "$(git rev-parse --git-common-dir)/harness.lock"`
+- 解放: セッション終了時（state 更新とコミットの後）に削除する。
+- `LOCK:` が出たら作業せずユーザーに確認する。前のセッションの消し忘れ（異常終了）とユーザーが答えた場合だけ、上書きして続行する。
+
+**採番**
+- T 番号はメインだけが振る。`backlog.md` に行を足し `tasks/T-xxx.md` を作ったら、**委譲や worktree 作成の前にベースブランチへコミットする。**
+
+**並行実装の手順**
+1. 並行させるのは**「触るファイル」が重ならず、互いに依存しない**タスクだけ。同時に動かすのは既定で3タスクまで（reviewer とマージがボトルネックになる）。
+2. タスクごとに worktree を作る: `git worktree add ../wt-T-015 -b task/T-015`
+3. 委譲は `delegate.sh` を使う。`../wt-T-xxx` があれば自動でその中で動き、reviewer にはベースとの diff だけが渡る。
+4. `続行` が出たら、メインが worktree 内で `git add -A && git commit -m "T-015 ..."` し、ベースへマージする（PR 運用なら PR を作り、マージ後に次へ）。
+5. マージ後、メインがベースブランチ上で `state.md` `backlog.md` を更新して別コミットにし、`git worktree remove ../wt-T-015` で片付ける。
+6. マージで競合したら、後からマージする側のタスクを NG 扱いにせず、メインがベースを worktree に取り込み（`git -C ../wt-T-015 merge main`）、該当の `impl-*` に競合解消を委譲して reviewer からやり直す。
+
+**`state.md` の書き方（並行時）**: 「進行中」に複数タスクを1行ずつ書き、各行に worktree 名を付ける。
+
+**追記型ログの競合回避** `.gitattributes`:
+```
+.harness/decisions.md        merge=union
+.harness/archive/*.md        merge=union
+```
+`state.md` `backlog.md` には union を使わない（書き換え型なので、union だと重複行が残る）。
+
+**並行させない**
+- Unity プロジェクト（Editor は1プロジェクトに1つ、`.unity` `.prefab` はマージできない）
+- DB マイグレーション、lockfile・生成ファイルを変更するタスク同士
+- 同じ公開 API やインターフェースに触るタスク同士
 
 ---
 
@@ -580,6 +683,7 @@ AI が読み書きできるのはテキストだけ。Editor の GUI 操作に�
 - `Library/` のコミット
 - Console にエラーがある状態でのタスク完了報告
 - Inspector にしか無い調整値（コードから追えない状態）を残すこと
+- 複数セッション・複数 worktree での並行作業（6.5節）
 
 ---
 
@@ -597,6 +701,9 @@ AI が読み書きできるのはテキストだけ。Editor の GUI 操作に�
 - `check-limits.sh` を実行せずに作業を始めること、`LIMIT:` 警告を無視して実装タスクに進むこと
 - 完了タスクの行を `backlog.md` に残すこと
 - reviewer にリポジトリ全体を読ませること（渡すのは diff と受入条件）
+- メイン以外が `.harness/` `docs/` を書くこと、タスクのブランチに状態ファイルを含めること
+- メインセッションを同時に2つ動かすこと、`LOCK:` を確認せずに作業すること
+- 1つの作業ツリーで2つのロールを同時に動かすこと、触るファイルが重なるタスクを並行させること
 - Unity: Console にエラーがある状態で完了報告すること
 
 ---
@@ -611,11 +718,12 @@ AI が読み書きできるのはテキストだけ。Editor の GUI 操作に�
 毎セッション自動で読まれる。**60行以内。規定本文は書かない。** 規定は下の参照先にある。
 
 ## 起動判定
+- `.harness/roles/` のロールとして委譲された → 以下を実行せず、ロール定義に従う。
 - `.harness/state.md` が無い → `harness.md` を全文読み、ブートストラップを実行する。それ以外は読まない。
 - ある → 再開モード。「常に読む」を順に行い、**現在地を3行で報告してから**作業する。
 
 ## 常に読む（再開時、この順で。読み終えるまで作業しない）
-0. `bash .harness/check-limits.sh` を実行。`LIMIT:` があれば退避を最初のタスクにする
+0. `bash .harness/check-limits.sh` を実行。`LOCK:` → ユーザーに確認。`LIMIT:` → 退避を最初のタスクにする。無ければロックを取る
 1. `.harness/state.md`
 2. `.harness/backlog.md`
 3. `git log --oneline -5`
@@ -631,6 +739,7 @@ AI が読み書きできるのはテキストだけ。Editor の GUI 操作に�
 | コードを書く・レビューする | `.harness/rules/coding.md` |
 | state / decisions / backlog / tasks を更新する、`LIMIT:` が出た | `.harness/rules/state-format.md` |
 | Unity プロジェクトのファイルに触る | `.harness/rules/unity.md` |
+| タスクを並行させる、worktree を作る・マージする、`LOCK:` が出た | `.harness/rules/parallel.md` |
 | 技術選定・構成に関わる判断をする | `docs/architecture.md` → 必要なら `docs/product.md` |
 | ハーネス自体を修正・再生成する | `harness.md` |
 | Claude Code で作業する | `CLAUDE.md` |
@@ -642,6 +751,7 @@ AI が読み書きできるのはテキストだけ。Editor の GUI 操作に�
 - 受入条件の範囲外を変更しない
 - `state.md` を更新せずに完了扱いにしない。完了行を `backlog.md` に残さない
 - reviewer には diff と受入条件だけ渡す
+- `.harness/` `docs/` を書くのはメインだけ。メインは同時に1つ。並行は worktree 単位
 - Unity: Console にエラーがある状態で完了報告しない。`.unity` `.prefab` を手でテキスト編集しない
 
 ## プロジェクト固有（5行以内）

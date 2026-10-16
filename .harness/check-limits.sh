@@ -16,4 +16,6 @@ check docs/product.md 80
 check docs/architecture.md 150
 for f in .harness/rules/*.md; do check "$f" 120; done
 for f in .harness/tasks/*.md;  do check "$f" 80;  done
+lock="$(git rev-parse --git-common-dir 2>/dev/null)/harness.lock"
+[ -f "$lock" ] && echo "LOCK: 別のメインセッションが動いている可能性（$(cat "$lock")）→ rules/parallel.md に従いユーザーに確認すること"
 exit 0
